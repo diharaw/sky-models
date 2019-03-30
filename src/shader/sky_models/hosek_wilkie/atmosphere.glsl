@@ -1,41 +1,29 @@
-#include <../table_common.glsl>
-
 // ------------------------------------------------------------------
 // UNIFORMS ---------------------------------------------------------
 // ------------------------------------------------------------------
 
-uniform vec3 u_CoeffsXYZ[9];
-uniform vec3 u_RadXYZ;
+uniform vec3 A, B, C, D, E, F, G, H, I, Z;
 
 // ------------------------------------------------------------------
 // FUNCTIONS --------------------------------------------------------
 // ------------------------------------------------------------------
 
-vec3 hosek_wilkie_sky_rgb(vec3 v)
+vec3 hosek_wilkie(float cos_theta, float gamma, float cos_gamma)
 {
-    float cosTheta = v.y;
-    float cosGamma = dot(u_Direction, v);
+	vec3 chi = (1 + cos_gamma * cos_gamma) / pow(1 + H * H - 2 * cos_gamma * H, vec3(1.5));
+    return (1 + A * exp(B / (cos_theta + 0.01))) * (C + D * exp(E * gamma) + F * (cos_gamma * cos_gamma) + G * chi + I * sqrt(cos_theta));
+}
 
-    if (cosTheta < 0.0)
-        cosTheta = 0.0;
+// ------------------------------------------------------------------
 
-    float t = cosTheta;
-    float g = map_gamma(cosGamma);
+vec3 hosek_wilkie_sky_rgb(vec3 v, vec3 sun_dir)
+{
+    float cos_theta = clamp(v.y, 0, 1);
+	float cos_gamma = clamp(dot(v, sun_dir), 0, 1);
+	float gamma_ = acos(cos_gamma);
 
-    vec3 F = table_lerp(t, TABLE_SIZE, THETA_TABLE);
-    vec3 G = table_lerp(g, TABLE_SIZE, GAMMA_TABLE);
-
-    const float zenith = pow(cosTheta, 2.0);
-    vec3 H = vec3(u_CoeffsXYZ[7].x * zenith + (u_CoeffsXYZ[2].x - 1.0),
-                  u_CoeffsXYZ[7].y * zenith + (u_CoeffsXYZ[2].y - 1.0),
-                  u_CoeffsXYZ[7].z * zenith + (u_CoeffsXYZ[2].z - 1.0));
-
-    // (1 - F(theta)) * (1 + G(phi) + H(theta))
-    vec3 XYZ = (vec3(1.0) - F) * (vec3(1.0) + G + H);
-
-    XYZ *= u_RadXYZ;
-
-    return XYZ_to_RGB(XYZ) * 5e-5;
+	vec3 R = Z * hosek_wilkie(cos_theta, gamma_, cos_gamma);
+    return R;
 }
 
 // ------------------------------------------------------------------

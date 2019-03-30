@@ -210,7 +210,7 @@ private:
 			if (m_sky_model == 2)
 				turbidity = m_hosek_wilkie_model.turbidity();
 
-			ImGui::SliderFloat("Turbidity", &turbidity, 0.0f, 10.0f);
+			ImGui::SliderFloat("Turbidity", &turbidity, 2.0f, 30.0f);
 
 			if (m_sky_model == 1)
 				m_preetham_model.set_turbidity(turbidity);
@@ -229,27 +229,27 @@ private:
 	{
 		{
 			// Create general shaders
-			m_vs = std::unique_ptr<dw::Shader>(dw::Shader::create_from_file(GL_VERTEX_SHADER, "shader/vs.glsl"));
-			m_fs = std::unique_ptr<dw::Shader>(dw::Shader::create_from_file(GL_FRAGMENT_SHADER, "shader/fs.glsl"));
+			m_mesh_vs = std::unique_ptr<dw::Shader>(dw::Shader::create_from_file(GL_VERTEX_SHADER, "shader/mesh_vs.glsl"));
+			m_mesh_fs = std::unique_ptr<dw::Shader>(dw::Shader::create_from_file(GL_FRAGMENT_SHADER, "shader/mesh_fs.glsl"));
 
-			if (!m_vs || !m_fs)
+			if (!m_mesh_vs || !m_mesh_fs)
 			{
 				DW_LOG_FATAL("Failed to create Shaders");
 				return false;
 			}
 
 			// Create general shader program
-			dw::Shader* shaders[] = { m_vs.get(), m_fs.get() };
-			m_program = std::make_unique<dw::Program>(2, shaders);
+			dw::Shader* shaders[] = { m_mesh_vs.get(), m_mesh_fs.get() };
+			m_mesh_program = std::make_unique<dw::Program>(2, shaders);
 
-			if (!m_program)
+			if (!m_mesh_program)
 			{
 				DW_LOG_FATAL("Failed to create Shader Program");
 				return false;
 			}
 
-			m_program->uniform_block_binding("u_GlobalUBO", 0);
-			m_program->uniform_block_binding("u_ObjectUBO", 1);
+			m_mesh_program->uniform_block_binding("u_GlobalUBO", 0);
+			m_mesh_program->uniform_block_binding("u_ObjectUBO", 1);
 		}
 
 		{
@@ -274,26 +274,26 @@ private:
 		}
 
 		{
-			m_cubemap_vs = std::unique_ptr<dw::Shader>(dw::Shader::create_from_file(GL_VERTEX_SHADER, "shader/cubemap_vs.glsl"));
-			m_cubemap_fs = std::unique_ptr<dw::Shader>(dw::Shader::create_from_file(GL_FRAGMENT_SHADER, "shader/cubemap_fs.glsl"));
+			m_sky_vs = std::unique_ptr<dw::Shader>(dw::Shader::create_from_file(GL_VERTEX_SHADER, "shader/sky_vs.glsl"));
+			m_sky_fs = std::unique_ptr<dw::Shader>(dw::Shader::create_from_file(GL_FRAGMENT_SHADER, "shader/sky_fs.glsl"));
 
-			if (!m_cubemap_vs || !m_cubemap_fs)
+			if (!m_sky_vs || !m_sky_fs)
 			{
 				DW_LOG_FATAL("Failed to create Shaders");
 				return false;
 			}
 
 			// Create general shader program
-			dw::Shader* shaders[] = { m_cubemap_vs.get(), m_cubemap_fs.get() };
-			m_cubemap_program = std::make_unique<dw::Program>(2, shaders);
+			dw::Shader* shaders[] = { m_sky_vs.get(), m_sky_fs.get() };
+			m_sky_program = std::make_unique<dw::Program>(2, shaders);
 
-			if (!m_cubemap_program)
+			if (!m_sky_program)
 			{
 				DW_LOG_FATAL("Failed to create Shader Program");
 				return false;
 			}
 
-			m_cubemap_program->uniform_block_binding("u_GlobalUBO", 0);
+			m_sky_program->uniform_block_binding("u_GlobalUBO", 0);
 		}
 
 		return true;
@@ -398,12 +398,12 @@ private:
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		
 		// Bind shader program.
-		m_program->use();
+		m_mesh_program->use();
 
 		// Bind uniform buffers.
 		m_global_ubo->bind_base(0);
 
-		m_program->set_uniform("direction", m_direction);
+		m_mesh_program->set_uniform("direction", m_direction);
 
 		// Draw meshes.
 		render_mesh(m_mesh);
@@ -417,7 +417,7 @@ private:
 		glDepthFunc(GL_LEQUAL);
 		glDisable(GL_CULL_FACE);
 
-		m_cubemap_program->use();
+		m_sky_program->use();
 
 		m_global_ubo->bind_base(0);
 
@@ -427,14 +427,14 @@ private:
 		/*m_cubemap_program->set_uniform("s_Skybox", 0);
 		m_cubemap->bind(0);*/
 
-		m_cubemap_program->set_uniform("sky_model", m_sky_model);
+		m_sky_program->set_uniform("sky_model", m_sky_model);
 
 		if (m_sky_model == 0)
-			m_bruneton_model.set_render_uniforms(m_cubemap_program.get());
+			m_bruneton_model.set_render_uniforms(m_sky_program.get());
 		else if (m_sky_model == 1)
-			m_preetham_model.set_render_uniforms(m_cubemap_program.get());
+			m_preetham_model.set_render_uniforms(m_sky_program.get());
 		else if (m_sky_model == 2)
-			m_hosek_wilkie_model.set_render_uniforms(m_cubemap_program.get());
+			m_hosek_wilkie_model.set_render_uniforms(m_sky_program.get());
 
 		glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
@@ -540,9 +540,9 @@ private:
     
 private:
 	// General GPU resources.
-    std::unique_ptr<dw::Shader> m_vs;
-	std::unique_ptr<dw::Shader> m_fs;
-	std::unique_ptr<dw::Program> m_program;
+    std::unique_ptr<dw::Shader> m_mesh_vs;
+	std::unique_ptr<dw::Shader> m_mesh_fs;
+	std::unique_ptr<dw::Program> m_mesh_program;
 	std::unique_ptr<dw::UniformBuffer> m_object_ubo;
     std::unique_ptr<dw::UniformBuffer> m_global_ubo;
 
@@ -554,9 +554,9 @@ private:
 	std::unique_ptr<dw::Shader> m_fullscreen_fs;
 	std::unique_ptr<dw::Program> m_fullscreen_program;
 
-	std::unique_ptr<dw::Shader>  m_cubemap_vs;
-	std::unique_ptr<dw::Shader>  m_cubemap_fs;
-	std::unique_ptr<dw::Program> m_cubemap_program;
+	std::unique_ptr<dw::Shader>  m_sky_vs;
+	std::unique_ptr<dw::Shader>  m_sky_fs;
+	std::unique_ptr<dw::Program> m_sky_program;
 
     // Camera.
 	std::unique_ptr<dw::Camera> m_main_camera;

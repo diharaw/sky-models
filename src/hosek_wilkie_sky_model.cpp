@@ -1,5 +1,4 @@
 #include "hosek_wilkie_sky_model.h"
-#include "hosek_data_XYZ.h"
 
 #include <macros.h>
 #include <logger.h>
@@ -8,137 +7,51 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-static const float kHalfPI = M_PI / 2.0f;
+#include "hosek_data_rgb.inl"
 
 // -----------------------------------------------------------------------------------------------------------------------------------
 
-float eval_quintic(const float w[6], const float data[6])
+
+double evaluate_spline(const double* spline, size_t stride, double value)
 {
-    return    w[0] * data[0]
-            + w[1] * data[1]
-            + w[2] * data[2]
-            + w[3] * data[3]
-            + w[4] * data[4]
-            + w[5] * data[5];
+    return
+    1 *  pow(1 - value, 5) *                 spline[0 * stride] +
+    5 *  pow(1 - value, 4) * pow(value, 1) * spline[1 * stride] +
+    10 * pow(1 - value, 3) * pow(value, 2) * spline[2 * stride] +
+    10 * pow(1 - value, 2) * pow(value, 3) * spline[3 * stride] +
+    5 *  pow(1 - value, 1) * pow(value, 4) * spline[4 * stride] +
+    1 *                      pow(value, 5) * spline[5 * stride];
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------
 
-void eval_quintic(const float w[6], const float data[6][9], float coeffs[9])
+double evaluate(const double * dataset, size_t stride, float turbidity, float albedo, float sunTheta)
 {
-    for (int i = 0; i < 9; i++)
-    {
-        coeffs[i] =   w[0] * data[0][i]
-                    + w[1] * data[1][i]
-                    + w[2] * data[2][i]
-                    + w[3] * data[3][i]
-                    + w[4] * data[4][i]
-                    + w[5] * data[5][i];
-    }
+    // splines are functions of elevation^1/3
+    double elevationK = pow(std::max<float>(0.f, 1.f - sunTheta / (M_PI / 2.f)), 1.f / 3.0f);
+    
+    // table has values for turbidity 1..10
+    int turbidity0 = glm::clamp(static_cast<int>(turbidity), 1, 10);
+    int turbidity1 = std::min(turbidity0 + 1, 10);
+    float turbidityK = glm::clamp(turbidity - turbidity0, 0.f, 1.f);
+    
+    const double * datasetA0 = dataset;
+    const double * datasetA1 = dataset + stride * 6 * 10;
+    
+    double a0t0 = evaluate_spline(datasetA0 + stride * 6 * (turbidity0 - 1), stride, elevationK);
+    double a1t0 = evaluate_spline(datasetA1 + stride * 6 * (turbidity0 - 1), stride, elevationK);
+    double a0t1 = evaluate_spline(datasetA0 + stride * 6 * (turbidity1 - 1), stride, elevationK);
+    double a1t1 = evaluate_spline(datasetA1 + stride * 6 * (turbidity1 - 1), stride, elevationK);
+    
+    return a0t0 * (1 - albedo) * (1 - turbidityK) + a1t0 * albedo * (1 - turbidityK) + a0t1 * (1 - albedo) * turbidityK + a1t1 * albedo * turbidityK;
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------
 
-void find_quintic_weights(float s, float w[6])
+glm::vec3 hosek_wilkie(float cos_theta, float gamma, float cos_gamma, glm::vec3 A, glm::vec3 B, glm::vec3 C, glm::vec3 D, glm::vec3 E, glm::vec3 F, glm::vec3 G, glm::vec3 H, glm::vec3 I)
 {
-    float s1 = s;
-    float s2 = s1 * s1;
-    float s3 = s1 * s2;
-    float s4 = s2 * s2;
-    float s5 = s2 * s3;
-
-    float is1 = 1.0f - s1;
-    float is2 = is1 * is1;
-    float is3 = is1 * is2;
-    float is4 = is2 * is2;
-    float is5 = is2 * is3;
-
-    w[0] = is5;
-    w[1] = is4 * s1 *  5.0f;
-    w[2] = is3 * s2 * 10.0f;
-    w[3] = is2 * s3 * 10.0f;
-    w[4] = is1 * s4 *  5.0f;
-    w[5] =       s5;
-}
-
-// -----------------------------------------------------------------------------------------------------------------------------------
-
-float find_hosek_coeffs(const float   dataset9[2][10][6][9],    // albedo x 2, turbidity x 10, quintics x 6, weights x 9
-					    const float   datasetR[2][10][6],       // albedo x 2, turbidity x 10, quintics x 6
-					    float         turbidity,
-					    float         albedo,
-					    float         solarElevation,
-					    float         coeffs[9])
-{
-    int tbi = int(floorf(turbidity));
-
-    if (tbi < 1)
-        tbi = 1;
-    else if (tbi > 9)
-        tbi = 9;
-
-    float tbf = turbidity - tbi;
-
-    const float s = powf(solarElevation / kHalfPI, (1.0f / 3.0f));
-
-    float quinticWeights[6];
-    find_quintic_weights(s, quinticWeights);
-
-    float ic[4][9];
-
-    eval_quintic(quinticWeights, dataset9[0][tbi - 1], ic[0]);
-    eval_quintic(quinticWeights, dataset9[1][tbi - 1], ic[1]);
-    eval_quintic(quinticWeights, dataset9[0][tbi    ], ic[2]);
-    eval_quintic(quinticWeights, dataset9[1][tbi    ], ic[3]);
-
-    float ir[4] =
-    {
-        eval_quintic(quinticWeights, datasetR[0][tbi - 1]),
-        eval_quintic(quinticWeights, datasetR[1][tbi - 1]),
-        eval_quintic(quinticWeights, datasetR[0][tbi    ]),
-        eval_quintic(quinticWeights, datasetR[1][tbi    ]),
-    };
-
-    float cw[4] =
-    {
-        (1.0f - albedo) * (1.0f - tbf),
-        albedo          * (1.0f - tbf),
-        (1.0f - albedo) * tbf,
-        albedo          * tbf,
-    };
-
-	for (int i = 0; i < 9; i++)
-	{
-		coeffs[i] = cw[0] * ic[0][i]
-                  + cw[1] * ic[1][i]
-                  + cw[2] * ic[2][i]
-                  + cw[3] * ic[3][i];
-	}
-
-    return cw[0] * ir[0] + cw[1] * ir[1] + cw[2] * ir[2] + cw[3] * ir[3];
-}
-
-// -----------------------------------------------------------------------------------------------------------------------------------
-
-float eval_hosek_coeffs(const float coeffs[9], float cosTheta, float gamma, float cosGamma)
-{
-    // Current coeffs ordering is AB I CDEF HG
-    //                            01 2 3456 78
-    const float expM   = expf(coeffs[4] * gamma);   // D g
-    const float rayM   = cosGamma * cosGamma;       // Rayleigh scattering
-    const float mieM   = (1.0f + rayM) / powf((1.0f + coeffs[8] * coeffs[8] - 2.0f * coeffs[8] * cosGamma), 1.5f);  // G
-    const float zenith = sqrtf(cosTheta);           // vertical zenith gradient
-
-    return (1.0f
-                 + coeffs[0] * expf(coeffs[1] / (cosTheta + 0.01f))     // A, B
-           )
-         * (1.0f
-                 + coeffs[3] * expM     // C
-                 + coeffs[5] * rayM     // E
-                 + coeffs[6] * mieM     // F
-                 + coeffs[7] * zenith   // H
-                 + (coeffs[2] - 1.0f)   // I
-           );
+    glm::vec3 chi = (1.f + cos_gamma * cos_gamma) / pow(1.f + H * H - 2.f * cos_gamma * H, glm::vec3(1.5f));
+    return (1.f + A * exp(B / (cos_theta + 0.01f))) * (C + D * exp(E * gamma) + F * (cos_gamma * cos_gamma) + G * chi + I * (float) sqrt(std::max(0.f, cos_theta)));
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------
@@ -159,16 +72,6 @@ HosekWilkieSkyModel::~HosekWilkieSkyModel()
 
 bool HosekWilkieSkyModel::initialize()
 {
-	m_table = new dw::Texture2D(TABLE_SIZE, 2, 1, 1, 1, GL_RGBA32F, GL_RGBA, GL_FLOAT);
-	m_table->set_min_filter(GL_LINEAR);
-	m_table->set_wrapping(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
-    if (!dw::utility::create_compute_program("shader/sky_models/hosek_wilkie/compute_tables_cs.glsl", &m_compute_tables_cs, &m_compute_tables_program))
-	{
-		DW_LOG_ERROR("Failed to load shaders");
-        return false;
-    }
-
     return true;
 }
 
@@ -176,131 +79,48 @@ bool HosekWilkieSkyModel::initialize()
 
 void HosekWilkieSkyModel::update()
 {
-	float solarElevation = m_direction.y > 0.0f ? asinf(m_direction.y) : 0.0f;    // altitude rather than zenith, so sin rather than cos
+	const float sunTheta = std::acos(glm::clamp(m_direction.y, 0.f, 1.f));
 
-    glm::vec3 albedo = rgb_to_XYZ(m_rgb_albedo);
-
-    // Note that the hosek coefficients change with time of day, vs. Preetham where the 'upper' coefficients stay the same,
-    // and only the scaler mPerezInvDen, consisting of time-dependent normalisation and zenith luminnce factors, changes.
-    m_rad_XYZ[0] = find_hosek_coeffs(kHosekCoeffsX, kHosekRadX, m_turbidity, albedo.x, solarElevation, m_coeffs_XYZ[0]);
-    m_rad_XYZ[1] = find_hosek_coeffs(kHosekCoeffsY, kHosekRadY, m_turbidity, albedo.y, solarElevation, m_coeffs_XYZ[1]);
-    m_rad_XYZ[2] = find_hosek_coeffs(kHosekCoeffsZ, kHosekRadZ, m_turbidity, albedo.z, solarElevation, m_coeffs_XYZ[2]);
-
-    m_rad_XYZ *= 683; // convert to luminance in lumens
-
-    if (m_direction.y < 0.0f)   // sun below horizon?
+    for (int i = 0; i < 3; ++i)
     {
-        float s = glm::clamp(1.0f + m_direction.y * 50.0f, 0.0f, 1.0f);   // goes from 1 to 0 as the sun sets
-		float is = 1.0f - s;
-
-        // Emulate Preetham's zenith darkening
-        float darken = zenith_luminance(acosf(m_direction.y), m_turbidity) / zenith_luminance(kHalfPI, m_turbidity);
-
-        // Take C/E/F which control sun term to zero
-        for (int j = 0; j < 3; j++)
-        {
-            m_coeffs_XYZ[j][3] *= s;
-            m_coeffs_XYZ[j][5] *= s;
-            m_coeffs_XYZ[j][6] *= s;
-
-            // Take horizon term H to zero, as it's an orange glow at this point
-            m_coeffs_XYZ[j][7] *= s;
-
-            // Take I term back to 1
-            m_coeffs_XYZ[j][2] *= s;
-            m_coeffs_XYZ[j][2] += is;
-        }
-
-        m_rad_XYZ *= darken;
+        A[i] = evaluate(datasetsRGB[i] + 0, 9, m_turbidity, m_albedo, sunTheta);
+        B[i] = evaluate(datasetsRGB[i] + 1, 9, m_turbidity, m_albedo, sunTheta);
+        C[i] = evaluate(datasetsRGB[i] + 2, 9, m_turbidity, m_albedo, sunTheta);
+        D[i] = evaluate(datasetsRGB[i] + 3, 9, m_turbidity, m_albedo, sunTheta);
+        E[i] = evaluate(datasetsRGB[i] + 4, 9, m_turbidity, m_albedo, sunTheta);
+        F[i] = evaluate(datasetsRGB[i] + 5, 9, m_turbidity, m_albedo, sunTheta);
+        G[i] = evaluate(datasetsRGB[i] + 6, 9, m_turbidity, m_albedo, sunTheta);
+        
+        // Swapped in the dataset
+        H[i] = evaluate(datasetsRGB[i] + 8, 9, m_turbidity, m_albedo, sunTheta);
+        I[i] = evaluate(datasetsRGB[i] + 7, 9, m_turbidity, m_albedo, sunTheta);
+        
+        Z[i] = evaluate(datasetsRGBRad[i], 1, m_turbidity, m_albedo, sunTheta);
     }
-
-    if (m_overcast != 0.0f)      // Handle overcast term
-    {
-        float is = m_overcast;
-        float s = 1.0f - m_overcast;     // goes to 0 as we go to overcast
-
-        // Hosek isn't self-normalising, unlike Preetham/CIE, which divides by PreethamLower().
-        // Thus when we lerp to the CIE overcast model, we get some non-linearities.
-        // We deal with this by using ratios of normalisation terms to balance.
-        // Another difference is that Hosek is relative to the average radiance,
-        // whereas CIE is the zenith radiance, so rather than taking the zenith
-        // as normalising as in CIE, we average over the zenith and two horizon
-        // points.
-        float cosGammaZ = m_direction.y;
-        float gammaZ    = acosf(cosGammaZ);
-        float cosGammaH = m_direction.z;
-        float gammaHP   = acosf(+m_direction.z);
-        float gammaHN   = M_PI - gammaHP;
-
-        float sc0 = eval_hosek_coeffs(m_coeffs_XYZ[1], 1.0f, gammaZ, cosGammaZ) * 2.0f
-                  + eval_hosek_coeffs(m_coeffs_XYZ[1], 0.0f, gammaHP, +cosGammaH)
-                  + eval_hosek_coeffs(m_coeffs_XYZ[1], 0.0f, gammaHN, -cosGammaH);
-
-        for (int j = 0; j < 3; j++)
-        {
-            // sun flare -> 0 strength/base chroma
-            // Take C/E/F which control sun term to zero
-            m_coeffs_XYZ[j][3] *= s;
-            m_coeffs_XYZ[j][5] *= s;
-            m_coeffs_XYZ[j][6] *= s;
-
-            // Take H back to 0
-            m_coeffs_XYZ[j][7] *= s;
-
-            // Take I term back to 1
-            m_coeffs_XYZ[j][2] *= s;
-            m_coeffs_XYZ[j][2] += is;
-
-            // Take A/B to  CIE cloudy sky model: 4, -0.7
-            m_coeffs_XYZ[j][0] = glm::mix(m_coeffs_XYZ[j][0],  4.0f, is);
-            m_coeffs_XYZ[j][1] = glm::mix(m_coeffs_XYZ[j][1], -0.7f, is);
-        }
-
-        float sc1 = eval_hosek_coeffs(m_coeffs_XYZ[1], 1.0f, gammaZ, cosGammaZ) * 2.0f
-                  + eval_hosek_coeffs(m_coeffs_XYZ[1], 0.0f, gammaHP, +cosGammaH)
-                  + eval_hosek_coeffs(m_coeffs_XYZ[1], 0.0f, gammaHN, -cosGammaH);
-
-        float rescale = sc0 / sc1;
-        m_rad_XYZ *= rescale;
-
-        // move back to white point
-        m_rad_XYZ.x = glm::mix(m_rad_XYZ.x, m_rad_XYZ.y, is);
-        m_rad_XYZ.z = glm::mix(m_rad_XYZ.z, m_rad_XYZ.y, is);
-    }
-
-	// -----------------------------------------------------------------------------
-    // Compute Tables with through Compute Shader
-    // -----------------------------------------------------------------------------
-
-    m_compute_tables_program->use();
     
-	m_compute_tables_program->set_uniform("TABLE_SIZE", TABLE_SIZE);
-
-	for (int i = 0; i < 9; i++)
-	{
-		m_coeffs_XYZ_GPU[i][0] = m_coeffs_XYZ[0][i];
-		m_coeffs_XYZ_GPU[i][1] = m_coeffs_XYZ[1][i];
-		m_coeffs_XYZ_GPU[i][2] = m_coeffs_XYZ[2][i];
-	}
-
-    m_compute_tables_program->set_uniform("u_CoeffsXYZ[0]", 9, m_coeffs_XYZ_GPU);
-
-    m_table->bind_image(0, 0, 0, GL_READ_WRITE, m_table->internal_format());
-
-	GL_CHECK_ERROR(glDispatchCompute(TABLE_SIZE / NUM_THREADS, 1, 1));
+    if (m_normalized_sun_y)
+    {
+        glm::vec3 S = hosek_wilkie(std::cos(sunTheta), 0, 1.f, A, B, C, D, E, F, G, H, I) * Z;
+        Z /= glm::dot(S, glm::vec3(0.2126, 0.7152, 0.0722));
+        Z *= m_normalized_sun_y;
+    }
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------
 
 void HosekWilkieSkyModel::set_render_uniforms(dw::Program* program)
 {
-	if (program->set_uniform("s_Table", 3))
-		m_table->bind(3);
-
-	program->set_uniform("TABLE_SIZE", TABLE_SIZE);
 	program->set_uniform("u_Direction", m_direction);
-	program->set_uniform("u_CoeffsXYZ[0]", 9, m_coeffs_XYZ_GPU);
-	program->set_uniform("u_RadXYZ", m_rad_XYZ);
+	program->set_uniform("A", A);
+	program->set_uniform("B", B);
+	program->set_uniform("C", C);
+	program->set_uniform("D", D);
+	program->set_uniform("E", E);
+	program->set_uniform("F", F);
+	program->set_uniform("G", G);
+	program->set_uniform("H", H);
+	program->set_uniform("I", I);
+	program->set_uniform("Z", Z);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------

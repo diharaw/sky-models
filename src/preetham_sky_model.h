@@ -1,8 +1,9 @@
 #pragma once
 
-#include "table_sky_model.h"
+#include "sky_model.h"
 
-class PreethamSkyModel : public TableSkyModel
+// A Practical Analytic Model for Daylight (A. J. Preetham, Peter Shirley, Brian Smits)
+class PreethamSkyModel : public SkyModel
 {
 public:
 	PreethamSkyModel();
@@ -13,10 +14,6 @@ public:
 	void set_render_uniforms(dw::Program* program) override;
 
 private:
-    float m_perez_x[5];
-    float m_perez_y[5];
-    float m_perez_Y[5];
-
-    glm::vec3 m_zenith = glm::vec3(0.0f);
-    glm::vec3 m_perez_inv_den = glm::vec3(1.0f);
+    glm::vec3 A, B, C, D, E;
+    glm::vec3 Z;
 };

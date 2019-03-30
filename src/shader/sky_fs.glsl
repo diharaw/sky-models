@@ -6,6 +6,7 @@ out vec4 PS_OUT_Color;
 
 in vec3 PS_IN_TexCoord;
 
+uniform vec3 u_Direction;
 uniform vec3 camera_pos;
 uniform int sky_model;
 
@@ -27,13 +28,13 @@ void main()
 	}
 	else if (sky_model == 1)
 	{
-		vec3 col = preetham_sky_rgb(dir);
+		vec3 col = preetham_sky_rgb(dir, u_Direction);
 
 		PS_OUT_Color = vec4(col, 1.0);
 	}
 	else
 	{
-		vec3 col = hosek_wilkie_sky_rgb(dir);
+		vec3 col = hosek_wilkie_sky_rgb(dir, u_Direction);
 
 		PS_OUT_Color = vec4(col, 1.0);
 	}

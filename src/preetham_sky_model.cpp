@@ -12,31 +12,25 @@
 
 // -----------------------------------------------------------------------------------------------------------------------------------
 
-//
-// The Perez function is as follows:
-//
-//    P(t, g) =  (1 + A e ^ (B / cos(t))) (1 + C e ^ (D g)  + E cos(g)  ^ 2)
-//               --------------------------------------------------------
-//               (1 + A e ^ B)            (1 + C e ^ (D ts) + E cos(ts) ^ 2)
-//
-// A: sky
-// B: sky tightness
-// C: sun
-// D: sun tightness, higher = tighter
-// E: rosy hue around sun
-
-inline float perez_upper(const float* lambdas, float cosTheta, float gamma, float cosGamma)
+float zenith_chromacity(const glm::vec4 & c0, const glm::vec4 & c1, const glm::vec4 & c2, float sunTheta, float turbidity)
 {
-    return  (1.0f + lambdas[0] * expf(lambdas[1] / (cosTheta + 1e-6f)))
-          * (1.0f + lambdas[2] * expf(lambdas[3] * gamma) + lambdas[4] * pow(cosGamma, 2.0f));
+    glm::vec4 thetav = glm::vec4(sunTheta * sunTheta * sunTheta, sunTheta * sunTheta, sunTheta, 1);
+    return glm::dot(glm::vec3(turbidity * turbidity, turbidity, 1), glm::vec3(glm::dot(thetav, c0), glm::dot(thetav, c1), glm::dot(thetav, c2)));
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------
 
-inline float perez_lower(const float* lambdas, float cosThetaS, float thetaS)
+float zenith_luminance(float sunTheta, float turbidity)
 {
-    return  (1.0f + lambdas[0] * expf(lambdas[1]))
-          * (1.0f + lambdas[2] * expf(lambdas[3] * thetaS) + lambdas[4] * pow(cosThetaS, 2.0f));
+    float chi = (4.f / 9.f - turbidity / 120) * (M_PI - 2 * sunTheta);
+    return (4.0453 * turbidity - 4.9710) * tan(chi) - 0.2155 * turbidity + 2.4192;
+}
+
+// -----------------------------------------------------------------------------------------------------------------------------------
+
+float perez(float theta, float gamma, float A, float B, float C, float D, float E)
+{
+    return (1.f + A * exp(B / (cos(theta) + 0.01))) * (1.f + C * exp(D * gamma) + E * cos(gamma) * cos(gamma));
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------
@@ -50,31 +44,13 @@ PreethamSkyModel::PreethamSkyModel()
 
 PreethamSkyModel::~PreethamSkyModel()
 {
-    DW_SAFE_DELETE(m_table);
-    DW_SAFE_DELETE(m_compute_tables_cs);
-	DW_SAFE_DELETE(m_compute_tables_program);
+    
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------
 
 bool PreethamSkyModel::initialize()
 {
-#ifdef SIM_CLAMP
-	int size = TABLE_SIZE + NUM_THREADS;
-#else
-	int size = TABLE_SIZE;
-#endif
-
-	m_table = new dw::Texture2D(size, 2, 1, 1, 1, GL_RGBA32F, GL_RGBA, GL_FLOAT);
-	m_table->set_min_filter(GL_LINEAR);
-	m_table->set_wrapping(GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE, GL_CLAMP_TO_EDGE);
-
-    if (!dw::utility::create_compute_program("shader/sky_models/preetham/compute_tables_cs.glsl", &m_compute_tables_cs, &m_compute_tables_program))
-	{
-		DW_LOG_ERROR("Failed to load shaders");
-        return false;
-    }
-
     return true;
 }
 
@@ -82,133 +58,43 @@ bool PreethamSkyModel::initialize()
 
 void PreethamSkyModel::update()
 {
-    float T = m_turbidity;
+	assert(m_turbidity >= 1);
 
-    m_perez_Y[0] =  0.17872f * T - 1.46303f;
-    m_perez_Y[1] = -0.35540f * T + 0.42749f;
-    m_perez_Y[2] = -0.02266f * T + 5.32505f;
-    m_perez_Y[3] =  0.12064f * T - 2.57705f;
-    m_perez_Y[4] = -0.06696f * T + 0.37027f;
+    const float sunTheta = std::acos(glm::clamp(m_direction.y, 0.f, 1.f));
 
-    m_perez_x[0] = -0.01925f * T - 0.25922f;
-    m_perez_x[1] = -0.06651f * T + 0.00081f;
-    m_perez_x[2] = -0.00041f * T + 0.21247f;
-    m_perez_x[3] = -0.06409f * T - 0.89887f;
-    m_perez_x[4] = -0.00325f * T + 0.04517f;
-
-    m_perez_y[0] = -0.01669f * T - 0.26078f;
-    m_perez_y[1] = -0.09495f * T + 0.00921f;
-    m_perez_y[2] = -0.00792f * T + 0.21023f;
-    m_perez_y[3] = -0.04405f * T - 1.65369f;
-    m_perez_y[4] = -0.01092f * T + 0.05291f;
-
-    float cosTheta = m_direction.y;
-    float theta  = acosf(cosTheta);    // angle from zenith rather than horizon
-    float theta2 = pow(theta, 2.0f);
-	float theta3 = theta2 * theta;
-	float T2 = pow(T, 2.0f);
-
-    // m_zenith stored as xyY
-    m_zenith.z = zenith_luminance(theta, T);
-
-    m_zenith.x =
-        ( 0.00165f * theta3 - 0.00374f * theta2 + 0.00208f * theta + 0.00000f) * T2 +
-        (-0.02902f * theta3 + 0.06377f * theta2 - 0.03202f * theta + 0.00394f) * T  +
-        ( 0.11693f * theta3 - 0.21196f * theta2 + 0.06052f * theta + 0.25885f);
-
-    m_zenith.y =
-        ( 0.00275f * theta3 - 0.00610f * theta2 + 0.00316f * theta + 0.00000f) * T2 +
-        (-0.04214f * theta3 + 0.08970f * theta2 - 0.04153f * theta + 0.00515f) * T  +
-        ( 0.15346f * theta3 - 0.26756f * theta2 + 0.06669f * theta + 0.26688f);
-
-    // Adjustments (extensions)
-
-    if (cosTheta < 0.0f)    // Handle sun going below the horizon
-    {
-        float s = glm::clamp(1.0f + cosTheta * 50.0f, 0.0f, 1.0f);   // goes from 1 to 0 as the sun sets
-
-        // Take C/E which control sun term to zero
-        m_perez_x[2] *= s;
-        m_perez_y[2] *= s;
-        m_perez_Y[2] *= s;
-        m_perez_x[4] *= s;
-        m_perez_y[4] *= s;
-        m_perez_Y[4] *= s;
-    }
-
-    if (m_overcast != 0.0f)      // Handle m_overcast term
-    {
-        float invOvercast = 1.0f - m_overcast;
-
-        // lerp back towards unity
-        m_perez_x[0] *= invOvercast;  // main sky chroma -> base
-        m_perez_y[0] *= invOvercast;
-
-        // sun flare -> 0 strength/base chroma
-        m_perez_x[2] *= invOvercast;
-        m_perez_y[2] *= invOvercast;
-        m_perez_Y[2] *= invOvercast;
-        m_perez_x[4] *= invOvercast;
-        m_perez_y[4] *= invOvercast;
-        m_perez_Y[4] *= invOvercast;
-
-        // lerp towards a fit of the CIE cloudy sky model: 4, -0.7
-        m_perez_Y[0] = glm::lerp(m_perez_Y[0],  4.0f, m_overcast);
-        m_perez_Y[1] = glm::lerp(m_perez_Y[1], -0.7f, m_overcast);
-
-        // lerp base colour towards white point
-        m_zenith.x = m_zenith.x * invOvercast + 0.333f * m_overcast;
-        m_zenith.y = m_zenith.y * invOvercast + 0.333f * m_overcast;
-    }
-
-    if (m_horiz_crush != 0.0f)
-    {
-        // The Preetham sky model has a "muddy" horizon, which can be objectionable in
-        // typical game views. We allow artistic control over it.
-        m_perez_Y[1] *= m_horiz_crush;
-        m_perez_x[1] *= m_horiz_crush;
-        m_perez_y[1] *= m_horiz_crush;
-    }
-
-    // initialize sun-constant parts of the Perez functions
-
-    glm::vec3 perezLower    // denominator terms are dependent on sun angle only
-    (
-        perez_lower(m_perez_x, cosTheta, theta),
-        perez_lower(m_perez_y, cosTheta, theta),
-        perez_lower(m_perez_Y, cosTheta, theta)
-    );
-
-	m_perez_inv_den = m_zenith / perezLower;
-
-    // -----------------------------------------------------------------------------
-    // Compute Tables with through Compute Shader
-    // -----------------------------------------------------------------------------
-
-    m_compute_tables_program->use();
+    // A.2 Skylight Distribution Coefficients and Zenith Values: compute Perez distribution coefficients
+    A = glm::vec3(-0.0193, -0.0167,  0.1787) * m_turbidity + glm::vec3(-0.2592, -0.2608, -1.4630);
+    B = glm::vec3(-0.0665, -0.0950, -0.3554) * m_turbidity + glm::vec3( 0.0008,  0.0092,  0.4275);
+    C = glm::vec3(-0.0004, -0.0079, -0.0227) * m_turbidity + glm::vec3( 0.2125,  0.2102,  5.3251);
+    D = glm::vec3(-0.0641, -0.0441,  0.1206) * m_turbidity + glm::vec3(-0.8989, -1.6537, -2.5771);
+    E = glm::vec3(-0.0033, -0.0109, -0.0670) * m_turbidity + glm::vec3( 0.0452,  0.0529,  0.3703);
     
-	m_compute_tables_program->set_uniform("TABLE_SIZE", TABLE_SIZE);
-    m_compute_tables_program->set_uniform("u_Perez_x[0]", 5, m_perez_x);
-	m_compute_tables_program->set_uniform("u_Perez_y[0]", 5, m_perez_y);
-	m_compute_tables_program->set_uniform("u_Perez_Y[0]", 5, m_perez_Y);
-
-    m_table->bind_image(0, 0, 0, GL_READ_WRITE, m_table->internal_format());
-
-	GL_CHECK_ERROR(glDispatchCompute(TABLE_SIZE / NUM_THREADS, 1, 1));
-
-	glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    // A.2 Skylight Distribution Coefficients and Zenith Values: compute zenith color
+    Z.x = zenith_chromacity(glm::vec4(0.00166, -0.00375, 0.00209, 0), glm::vec4(-0.02903, 0.06377, -0.03202, 0.00394), glm::vec4(0.11693, -0.21196, 0.06052, 0.25886), sunTheta, m_turbidity);
+    Z.y = zenith_chromacity(glm::vec4(0.00275, -0.00610, 0.00317, 0), glm::vec4(-0.04214, 0.08970, -0.04153, 0.00516), glm::vec4(0.15346, -0.26756, 0.06670, 0.26688), sunTheta, m_turbidity);
+    Z.z = zenith_luminance(sunTheta, m_turbidity);
+    Z.z *= 1000; // conversion from kcd/m^2 to cd/m^2
+    
+    // 3.2 Skylight Model: pre-divide zenith color by distribution denominator
+	Z.x /= perez(0, sunTheta, A.x, B.x, C.x, D.x, E.x);
+    Z.y /= perez(0, sunTheta, A.y, B.y, C.y, D.y, E.y);
+    Z.z /= perez(0, sunTheta, A.z, B.z, C.z, D.z, E.z);
+    
+    // For low dynamic range simulation, normalize luminance to have a fixed value for sun
+    if (m_normalized_sun_y) Z.z = m_normalized_sun_y / perez(sunTheta, 0, A.z, B.z, C.z, D.z, E.z);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------
 
 void PreethamSkyModel::set_render_uniforms(dw::Program* program)
 {
-	if (program->set_uniform("s_Table", 3))
-		m_table->bind(3);
-
-	program->set_uniform("TABLE_SIZE", TABLE_SIZE);
 	program->set_uniform("u_Direction", m_direction);
-	program->set_uniform("u_PerezInvDen", m_perez_inv_den);
+	program->set_uniform("p_A", A);
+	program->set_uniform("p_B", B);
+	program->set_uniform("p_C", C);
+	program->set_uniform("p_D", D);
+	program->set_uniform("p_E", E);
+	program->set_uniform("p_Z", Z);
 }
 
 // -----------------------------------------------------------------------------------------------------------------------------------

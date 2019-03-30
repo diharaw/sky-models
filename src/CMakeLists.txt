@@ -10,10 +10,8 @@ set(SKY_MODELS_SOURCES ${PROJECT_SOURCE_DIR}/src/main.cpp
                        ${PROJECT_SOURCE_DIR}/src/preetham_sky_model.cpp
                        ${PROJECT_SOURCE_DIR}/src/hosek_wilkie_sky_model.h
                        ${PROJECT_SOURCE_DIR}/src/hosek_wilkie_sky_model.cpp
-                       ${PROJECT_SOURCE_DIR}/src/table_sky_model.h
-                       ${PROJECT_SOURCE_DIR}/src/table_sky_model.cpp
                        ${PROJECT_SOURCE_DIR}/src/sky_model.h
-                       ${PROJECT_SOURCE_DIR}/src/hosek_data_XYZ.h)
+                       ${PROJECT_SOURCE_DIR}/src/hosek_data_rgb.inl)
 
 if (EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
