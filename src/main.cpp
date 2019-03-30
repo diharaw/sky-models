@@ -71,7 +71,8 @@ protected:
 		update_global_uniforms(m_global_uniforms);
 		update_object_uniforms(m_mesh_transforms);
 
-		ui();
+		if (m_show_gui)
+			ui();
 
 		m_bruneton_model.set_direction(m_direction);
 		m_preetham_model.set_direction(m_direction);
@@ -146,6 +147,9 @@ protected:
         // Handle sideways movement.
         if(code == GLFW_KEY_A || code == GLFW_KEY_D)
             m_sideways_speed = 0.0f;
+
+		if (code == GLFW_KEY_G)
+			m_show_gui = !m_show_gui;
     }
     
     // -----------------------------------------------------------------------------------------------------------------------------------
@@ -570,6 +574,7 @@ private:
 	dw::Mesh* m_mesh;
 
     // Camera controls.
+	bool m_show_gui = true;
     bool m_mouse_look = false;
     bool m_debug_mode = false;
     float m_heading_speed = 0.0f;

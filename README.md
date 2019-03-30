@@ -1,10 +1,36 @@
-# SkyModels
-A collection of various Sky Models implemented with OpenGL compute shaders suitable for real-time rendering.
+# Sky Models
+A collection of various Sky Model implementations in OpenGL suitable for real-time rendering.
+
+* Bruneton - [Precomputed Atmospheric Scattering
+](http://www-ljk.imag.fr/Publications/Basilic/com.lmc.publi.PUBLI_Article@11e7cdda2f7_f64b69/article.pdf)
+* Preetham - [A Practical Analytic Model for Daylight](hhttps://www.cs.utah.edu/~shirley/papers/sunsky/sunsky.pdf)
+* Hosek-Wilkie - [An Analytic Model for Full Spectral Sky-Dome Radiance](https://cgg.mff.cuni.cz/projects/SkylightModelling/HosekWilkie_SkylightModel_SIGGRAPH2012_Preprint_lowres.pdf)
+
+Bruneton model imeplementation based on the [Unity port](https://github.com/Scrawk/Brunetons-Atmospheric-Scatter) by Scrawk.
 
 ## Screenshots
-![SkyModels](data/bruneton-1.jpg)
-![SkyModels](data/preetham-1.jpg)
-![SkyModels](data/hosek_wilkie-1.jpg)
-![SkyModels](data/bruneton-2.jpg)
-![SkyModels](data/preetham-2.jpg)
-![SkyModels](data/hosek_wilkie-2.jpg)
+![SkyModels](data/SkyModels_1.jpg)
+![SkyModels](data/SkyModels_2.jpg)
+
+## Dependencies
+* [dwSampleFramework](https://github.com/diharaw/dwSampleFramework) 
+
+## License
+```
+Copyright (c) 2018 Dihara Wijetunga
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
+associated documentation files (the "Software"), to deal in the Software without restriction, 
+including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, 
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT 
+LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. 
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE 
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
