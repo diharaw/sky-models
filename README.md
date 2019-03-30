@@ -3,7 +3,7 @@ A collection of various Sky Model implementations in OpenGL suitable for real-ti
 
 * Bruneton - [Precomputed Atmospheric Scattering
 ](http://www-ljk.imag.fr/Publications/Basilic/com.lmc.publi.PUBLI_Article@11e7cdda2f7_f64b69/article.pdf)
-* Preetham - [A Practical Analytic Model for Daylight](hhttps://www.cs.utah.edu/~shirley/papers/sunsky/sunsky.pdf)
+* Preetham - [A Practical Analytic Model for Daylight](https://www.cs.utah.edu/~shirley/papers/sunsky/sunsky.pdf)
 * Hosek-Wilkie - [An Analytic Model for Full Spectral Sky-Dome Radiance](https://cgg.mff.cuni.cz/projects/SkylightModelling/HosekWilkie_SkylightModel_SIGGRAPH2012_Preprint_lowres.pdf)
 
 Bruneton model imeplementation based on the [Unity port](https://github.com/Scrawk/Brunetons-Atmospheric-Scatter) by Scrawk.
