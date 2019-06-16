@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.8 FATAL_ERROR)
 
+find_program(CLANG_FORMAT_EXE NAMES "clang-format" DOC "Path to clang-format executable")
+
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
@@ -36,6 +38,10 @@ if (APPLE)
 else()
     add_custom_command(TARGET SkyModels POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/shader $<TARGET_FILE_DIR:SkyModels>/shader)
     add_custom_command(TARGET SkyModels POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/data/mesh $<TARGET_FILE_DIR:SkyModels>/mesh)
+endif()
+
+if(CLANG_FORMAT_EXE)
+    add_custom_target(clang-format-project-files COMMAND ${CLANG_FORMAT_EXE} -i -style=file ${SKY_MODELS_SOURCES})
 endif()
 
 set_property(TARGET SkyModels PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/bin/$(Configuration)")
