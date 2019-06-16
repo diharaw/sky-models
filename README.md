@@ -17,7 +17,7 @@ Bruneton model implementation based on the [Unity port](https://github.com/Scraw
 
 ## License
 ```
-Copyright (c) 2018 Dihara Wijetunga
+Copyright (c) 2019 Dihara Wijetunga
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and 
 associated documentation files (the "Software"), to deal in the Software without restriction, 
